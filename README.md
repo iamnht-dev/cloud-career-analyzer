@@ -1,86 +1,61 @@
-# ☁️ Cloud Career Readiness Analyzer
+# ☁️ Cloud Career Readiness Analyzer (Enterprise Edition)
 
-> An AI-powered web application that analyzes your CV and evaluates your readiness for Cloud/AWS career paths — built entirely on AWS serverless architecture.
+> An Enterprise-grade, AI-powered web application that analyzes your CV and evaluates your readiness for Cloud/AWS career paths. Built with a highly decoupled, event-driven serverless architecture on AWS.
 
 ![AWS](https://img.shields.io/badge/AWS-Powered-orange?logo=amazonaws)
+![Architecture](https://img.shields.io/badge/Architecture-Event--Driven-purple)
 ![React](https://img.shields.io/badge/React-18-blue?logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
-![License](https://img.shields.io/badge/License-MIT-green)
+![IaC](https://img.shields.io/badge/IaC-AWS_SAM-red?logo=aws)
 
 ---
 
 ## 🎯 What is this?
 
-Most CV analyzers give generic feedback. **Cloud Career Readiness Analyzer** is different — it focuses specifically on **Cloud & AWS career paths**.
+Unlike generic CV analyzers, **Cloud Career Readiness Analyzer** focuses 100% on **Cloud & AWS career paths**. 
 
 Upload your CV and get:
 - 📊 **Readiness Score** — How ready are you for your target Cloud role?
 - 🕳️ **Skill Gap Analysis** — What's missing compared to industry requirements?
 - 🏅 **Certification Roadmap** — Which AWS certifications should you pursue next?
-- 📧 **Email Report** — Receive a detailed analysis directly in your inbox
-
-### Target Roles Supported
-| Role | Certifications Benchmarked |
-|---|---|
-| ☁️ Cloud Engineer | CLF-C02, SAA-C03 |
-| 🏗️ Solutions Architect | SAA-C03, SAP-C02 |
-| ⚙️ DevOps Engineer | SAA-C03, DVA-C02, DOP-C02 |
-| 📊 Data Engineer | SAA-C03, DEA-C01 |
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Enterprise Architecture (12+ AWS Services)
+
+This project simulates a production-ready, 4-person team scale architecture, utilizing advanced AWS services for Orchestration, Data Analytics, and Infrastructure as Code (IaC).
 
 ```
-[User Browser]
-      ↓
-[AWS Amplify] — React + TypeScript frontend
-      ↓
-[Amazon Cognito] — Authentication & Authorization
-      ↓
-[API Gateway] → [AWS Lambda] — Serverless business logic
-                    ↓               ↓
-              [Amazon S3]    [Amazon Textract]
-              (Store CV)     (Extract text from PDF)
-                                    ↓
-                           [Amazon Bedrock]
-                           (AI Analysis — Claude)
-                                    ↓
-                           [Amazon DynamoDB]
-                           (Store analysis results)
-                                    ↓
-                           [Amazon SNS]
-                           (Send email report)
-                                    ↓
-                           [Amazon CloudWatch]
-                           (Monitoring & Alerts)
+[Frontend & Auth]
+[AWS Amplify] ← React UI
+[Amazon Cognito] ← Authentication
+
+[API & Event Routing]
+[API Gateway] → [Lambda Proxy] → Trigger Orchestration
+
+[Workflow Orchestration - Core Engine]
+[AWS Step Functions] 
+   ├── Step 1: [Amazon S3] (Store PDF)
+   ├── Step 2: [Amazon Textract] (Extract Text async)
+   ├── Step 3: [Amazon Bedrock] (AI Analysis - Parallel processing for Skills, Certs, Gaps)
+   └── Step 4: [Lambda] (Aggregate & Format Results)
+
+[Storage & Delivery]
+   ├── [Amazon DynamoDB] (Store Results)
+   └── [Amazon SNS] (Email Notification)
+
+[Data Analytics Pipeline (For Admin/Business Insights)]
+[DynamoDB Streams] → [Kinesis Firehose] → [S3 Data Lake] → [Amazon Athena]
+(Query aggregate data: e.g., "Most lacking AWS skills among applicants")
+
+[Observability & IaC]
+[Amazon CloudWatch] (Logs & Metrics)
+[AWS SAM / CloudFormation] (Infrastructure as Code)
 ```
 
-### AWS Services Used
-| Service | Purpose |
-|---|---|
-| **AWS Amplify** | Host & deploy React frontend |
-| **Amazon Cognito** | User authentication |
-| **API Gateway** | RESTful API endpoints |
-| **AWS Lambda** | Serverless compute |
-| **Amazon S3** | CV file storage |
-| **Amazon Textract** | Extract text from PDF |
-| **Amazon Bedrock** | AI-powered CV analysis (Claude) |
-| **Amazon DynamoDB** | Store analysis history |
-| **Amazon SNS** | Send email reports |
-| **Amazon CloudWatch** | Logs, metrics & alerts |
-
----
-
-## 🖥️ Features
-
-- 🔐 **Secure Login** via Amazon Cognito
-- 📤 **Drag & Drop CV Upload** (PDF format)
-- 🎯 **Role Selection** — Choose your target Cloud position
-- ⚡ **Real-time Processing** — See each step as it happens
-- 📈 **Visual Dashboard** — Radar chart, readiness score, skill gaps
-- 📋 **Analysis History** — Track your improvement over time
-- 📧 **Email Report** — Receive detailed feedback via email
+### 🌟 Key Enterprise Features
+1. **AWS Step Functions Orchestration:** Replaces monolithic Lambda functions with a visual, stateful workflow, enabling easy retries, error handling, and parallel AI processing.
+2. **Data Analytics Pipeline:** Uses Kinesis and Athena to create a serverless data lake, allowing business analytics without impacting the operational database.
+3. **Infrastructure as Code (IaC):** The entire backend is deployed using AWS SAM (Serverless Application Model), ensuring reproducible and scalable environments.
 
 ---
 
@@ -90,15 +65,14 @@ Upload your CV and get:
 cloud-career-analyzer/
 ├── frontend/                  # React + TypeScript (Vite)
 │   ├── src/
-│   │   ├── components/        # Reusable UI components
-│   │   ├── pages/             # Page components
-│   │   ├── services/          # API calls
-│   │   └── main.tsx
 │   └── package.json
-├── backend/                   # AWS Lambda Functions
-│   ├── analyze-cv/            # Textract + Bedrock analysis
-│   ├── get-history/           # Fetch analysis history
-│   └── send-report/           # SNS email notification
+├── backend/                   # AWS SAM Infrastructure
+│   ├── statemachine/          # Step Functions definition (ASL)
+│   ├── functions/             # Lambda function handlers
+│   │   ├── extract_text/
+│   │   ├── analyze_bedrock/
+│   │   └── save_results/
+│   └── template.yaml          # AWS SAM Infrastructure Definition
 └── README.md
 ```
 
@@ -108,16 +82,15 @@ cloud-career-analyzer/
 
 ### Prerequisites
 - Node.js >= 18
-- AWS Account (Free Tier is sufficient)
 - AWS CLI configured
+- AWS SAM CLI installed
 
-### Run Frontend Locally
+### Run Locally (Frontend)
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
@@ -126,9 +99,3 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 **iamnht-dev**
 - GitHub: [@iamnht-dev](https://github.com/iamnht-dev)
 - Program: AWS Challenger — FCAJ
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License.
