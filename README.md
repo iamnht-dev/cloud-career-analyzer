@@ -20,7 +20,7 @@ Upload your CV and get:
 
 ---
 
-## 🏗️ Enterprise Architecture (12+ AWS Services)
+## 🏗️ Enterprise Architecture
 
 This project simulates a production-ready, 4-person team scale architecture, utilizing advanced AWS services for Orchestration, Data Analytics, and Infrastructure as Code (IaC).
 
