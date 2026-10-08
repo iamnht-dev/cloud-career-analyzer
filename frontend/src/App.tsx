@@ -1,6 +1,67 @@
-import { Upload, FileCheck, Target, Award, Cloud } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Upload, FileCheck, Target, Award, Cloud, Loader2, CheckCircle } from 'lucide-react';
 
 function App() {
+  const [file, setFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      if (selectedFile.type !== "application/pdf") {
+        alert("Vui lòng chỉ tải lên định dạng PDF.");
+        return;
+      }
+      if (selectedFile.size > 5 * 1024 * 1024) {
+        alert("File quá lớn. Vui lòng tải file dưới 5MB.");
+        return;
+      }
+      setFile(selectedFile);
+      setUploadSuccess(false);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!file) {
+      fileInputRef.current?.click();
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadSuccess(false);
+
+    try {
+      // 1. Lấy Presigned URL từ Backend (API Gateway -> Lambda)
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const response = await fetch(apiUrl);
+      if (!response.ok) throw new Error("Không thể kết nối đến máy chủ.");
+      
+      const data = await response.json();
+      const { uploadUrl } = data;
+
+      // 2. Upload thẳng file PDF lên S3 bằng Presigned URL
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": "application/pdf"
+        }
+      });
+
+      if (!uploadResponse.ok) throw new Error("Lỗi khi tải file lên S3.");
+      
+      setUploadSuccess(true);
+      setFile(null); // Reset sau khi thành công
+    } catch (error) {
+      console.error(error);
+      alert("Đã có lỗi xảy ra khi tải CV lên. Vui lòng thử lại sau.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       {/* Navigation */}
@@ -36,29 +97,79 @@ function App() {
         </p>
 
         {/* Upload Action Area */}
-        <div className="max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-sm border-2 border-slate-200 border-dashed hover:border-indigo-400 hover:bg-indigo-50/30 transition-all duration-300 cursor-pointer group">
+        <div 
+          onClick={() => !file && fileInputRef.current?.click()}
+          className={`max-w-xl mx-auto p-8 rounded-2xl shadow-sm border-2 border-dashed transition-all duration-300 ${file ? 'border-indigo-400 bg-indigo-50/50' : 'border-slate-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer'} group`}
+        >
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            accept="application/pdf" 
+            className="hidden" 
+          />
+
           <div className="flex flex-col items-center justify-center space-y-5">
-            <div className="p-5 bg-indigo-100 text-indigo-600 rounded-2xl group-hover:scale-110 group-hover:-translate-y-1 transition-transform duration-300 shadow-sm">
-              <Upload size={36} strokeWidth={2.5} />
-            </div>
+            {uploadSuccess ? (
+              <div className="p-5 bg-green-100 text-green-600 rounded-2xl shadow-sm animate-bounce">
+                <CheckCircle size={36} strokeWidth={2.5} />
+              </div>
+            ) : (
+              <div className={`p-5 rounded-2xl transition-transform duration-300 shadow-sm ${file ? 'bg-indigo-200 text-indigo-700' : 'bg-indigo-100 text-indigo-600 group-hover:scale-110 group-hover:-translate-y-1'}`}>
+                {isUploading ? <Loader2 size={36} className="animate-spin" /> : <Upload size={36} strokeWidth={2.5} />}
+              </div>
+            )}
+            
             <div>
-              <p className="text-xl font-bold text-slate-800">Upload your CV</p>
-              <p className="text-sm text-slate-500 mt-2">PDF format only (Max 5MB)</p>
+              {uploadSuccess ? (
+                <>
+                  <p className="text-xl font-bold text-green-700">Upload Successful!</p>
+                  <p className="text-sm text-green-600 mt-2">AI is now analyzing your CV...</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xl font-bold text-slate-800">
+                    {file ? file.name : "Upload your CV"}
+                  </p>
+                  <p className="text-sm text-slate-500 mt-2">
+                    {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "PDF format only (Max 5MB)"}
+                  </p>
+                </>
+              )}
             </div>
-            <button className="mt-4 px-8 py-3.5 w-full font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5">
-              Start Free Analysis
-            </button>
+
+            {!uploadSuccess && (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUpload();
+                }}
+                disabled={isUploading}
+                className="mt-4 px-8 py-3.5 w-full font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin mr-2" /> 
+                    Uploading to S3...
+                  </>
+                ) : file ? "Start Free Analysis" : "Select PDF File"}
+              </button>
+            )}
+            
+            {file && !isUploading && !uploadSuccess && (
+              <p onClick={(e) => { e.stopPropagation(); setFile(null); }} className="text-sm text-red-500 hover:underline cursor-pointer mt-2">
+                Remove file
+              </p>
+            )}
           </div>
         </div>
       </main>
 
       {/* Features Grid */}
       <section className="bg-white border-t border-slate-200 py-20 relative overflow-hidden">
-        {/* Decorative background shape */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] opacity-[0.03] bg-indigo-600 blur-[100px] rounded-full pointer-events-none"></div>
 
         <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
-          
           <div className="flex flex-col items-center text-center p-8 bg-slate-50/50 rounded-2xl border border-slate-100 hover:border-blue-200 hover:bg-white transition-all shadow-sm hover:shadow-md">
             <div className="p-4 bg-blue-100 text-blue-600 rounded-xl mb-6">
               <Target size={32} />
@@ -66,7 +177,6 @@ function App() {
             <h3 className="text-xl font-bold text-slate-900 mb-3">Role Readiness Score</h3>
             <p className="text-slate-600 leading-relaxed">Find out exactly how close you are to becoming a Cloud Engineer or Solutions Architect.</p>
           </div>
-
           <div className="flex flex-col items-center text-center p-8 bg-slate-50/50 rounded-2xl border border-slate-100 hover:border-purple-200 hover:bg-white transition-all shadow-sm hover:shadow-md">
             <div className="p-4 bg-purple-100 text-purple-600 rounded-xl mb-6">
               <FileCheck size={32} />
@@ -74,7 +184,6 @@ function App() {
             <h3 className="text-xl font-bold text-slate-900 mb-3">Skill Gap Analysis</h3>
             <p className="text-slate-600 leading-relaxed">We compare your CV against thousands of real job descriptions to find what you're missing.</p>
           </div>
-
           <div className="flex flex-col items-center text-center p-8 bg-slate-50/50 rounded-2xl border border-slate-100 hover:border-amber-200 hover:bg-white transition-all shadow-sm hover:shadow-md">
             <div className="p-4 bg-amber-100 text-amber-600 rounded-xl mb-6">
               <Award size={32} />
@@ -82,7 +191,6 @@ function App() {
             <h3 className="text-xl font-bold text-slate-900 mb-3">Certification Roadmap</h3>
             <p className="text-slate-600 leading-relaxed">Get a personalized learning path telling you exactly which AWS certs to tackle next.</p>
           </div>
-
         </div>
       </section>
     </div>

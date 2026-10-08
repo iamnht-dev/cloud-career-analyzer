@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'cloud-career-analyzer-backend SAM Template for Cloud Career Readiness
+  Analyzer
+
+  '
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 256
+    Runtime: nodejs20.x
+    Architectures:
+    - x86_64
+  Api:
+    Cors:
+      AllowMethods: '''GET,POST,OPTIONS'''
+      AllowHeaders: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+      AllowOrigin: '''*'''
+Resources:
+  CVUploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      CorsConfiguration:
+        CorsRules:
+        - AllowedHeaders:
+          - '*'
+          AllowedMethods:
+          - PUT
+          - GET
+          AllowedOrigins:
+          - '*'
+          MaxAge: 3000
+  GetUploadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetUploadUrlFunction
+      Handler: app.handler
+      Environment:
+        Variables:
+          UPLOAD_BUCKET:
+            Ref: CVUploadBucket
+      Policies:
+      - S3WritePolicy:
+          BucketName:
+            Ref: CVUploadBucket
+      Events:
+        GetUrl:
+          Type: Api
+          Properties:
+            Path: /upload-url
+            Method: get
+    Metadata:
+      SamResourceId: GetUploadUrlFunction
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL to get upload link
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/upload-url
+  BucketName:
+    Description: S3 Bucket Name for CVs
+    Value:
+      Ref: CVUploadBucket
