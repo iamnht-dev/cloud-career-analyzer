@@ -1,0 +1,10 @@
+{
+  "name": "get_upload_url",
+  "version": "1.0.0",
+  "description": "Lambda function to generate S3 presigned URL for CV uploads",
+  "main": "app.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/s3-request-presigner": "^3.500.0"
+  }
+}

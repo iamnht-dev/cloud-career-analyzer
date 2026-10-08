@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  cloud-career-analyzer-backend
+  SAM Template for Cloud Career Readiness Analyzer
+
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 256
+    Runtime: nodejs20.x
+    Architectures:
+      - x86_64
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'*'"
+
+Resources:
+  # 1. S3 Bucket to store CVs securely
+  CVUploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - PUT
+              - GET
+            AllowedOrigins:
+              - '*'
+            MaxAge: 3000
+
+  # 2. Lambda function to generate Presigned URL
+  GetUploadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/get_upload_url/
+      Handler: app.handler
+      Environment:
+        Variables:
+          UPLOAD_BUCKET: !Ref CVUploadBucket
+      Policies:
+        - S3WritePolicy:
+            BucketName: !Ref CVUploadBucket
+      Events:
+        GetUrl:
+          Type: Api
+          Properties:
+            Path: /upload-url
+            Method: get
+
+Outputs:
+  ApiEndpoint:
+    Description: "API Gateway endpoint URL to get upload link"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/upload-url"
+  BucketName:
+    Description: "S3 Bucket Name for CVs"
+    Value: !Ref CVUploadBucket
