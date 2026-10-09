@@ -6,7 +6,7 @@ Description: 'cloud-career-analyzer-backend SAM Template for Cloud Career Readin
   '
 Globals:
   Function:
-    Timeout: 10
+    Timeout: 30
     MemorySize: 256
     Runtime: nodejs20.x
     Architectures:
@@ -51,6 +51,22 @@ Resources:
             Method: get
     Metadata:
       SamResourceId: GetUploadUrlFunction
+  ExtractTextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ExtractTextFunction
+      Handler: app.handler
+      Policies:
+      - S3ReadPolicy:
+          BucketName:
+            Ref: CVUploadBucket
+      - Statement:
+        - Effect: Allow
+          Action:
+          - textract:DetectDocumentText
+          Resource: '*'
+    Metadata:
+      SamResourceId: ExtractTextFunction
 Outputs:
   ApiEndpoint:
     Description: API Gateway endpoint URL to get upload link
@@ -60,3 +76,9 @@ Outputs:
     Description: S3 Bucket Name for CVs
     Value:
       Ref: CVUploadBucket
+  ExtractTextFunctionArn:
+    Description: ARN of the Extract Text Lambda Function
+    Value:
+      Fn::GetAtt:
+      - ExtractTextFunction
+      - Arn

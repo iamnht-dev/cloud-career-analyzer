@@ -9,4 +9,13 @@ manifest_hash = ""
 packagetype = "Zip"
 functions = ["GetUploadUrlFunction"]
 
+[function_build_definitions.f46cad1e-31e5-4d92-9b2d-02cc2d850220]
+codeuri = "D:\\SE\\Semester 6\\AWS\\Project\\cloud-career-analyzer\\backend\\functions\\extract_text"
+runtime = "nodejs20.x"
+architecture = "x86_64"
+handler = "app.handler"
+manifest_hash = ""
+packagetype = "Zip"
+functions = ["ExtractTextFunction"]
+
 [layer_build_definitions]

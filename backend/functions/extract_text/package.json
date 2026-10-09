@@ -1,9 +1,10 @@
 {
   "name": "extract_text",
   "version": "1.0.0",
-  "description": "Extract text from CV PDF using Amazon Textract",
+  "description": "Extract text from CV PDF using open-source pdf-parse",
   "main": "app.js",
   "dependencies": {
-    "@aws-sdk/client-textract": "^3.500.0"
+    "@aws-sdk/client-s3": "^3.500.0",
+    "pdf-parse": "^1.1.1"
   }
 }
