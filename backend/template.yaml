@@ -6,7 +6,7 @@ Description: >
 
 Globals:
   Function:
-    Timeout: 10
+    Timeout: 30 # Tăng timeout lên 30s vì Textract cần thời gian phân tích PDF
     MemorySize: 256
     Runtime: nodejs20.x
     Architectures:
@@ -52,6 +52,21 @@ Resources:
             Path: /upload-url
             Method: get
 
+  # 3. Lambda function to extract text from CV using Amazon Textract
+  ExtractTextFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/extract_text/
+      Handler: app.handler
+      Policies:
+        - S3ReadPolicy: # Cho phép hàm đọc file PDF từ S3
+            BucketName: !Ref CVUploadBucket
+        - Statement: # Cấp quyền cho hàm gọi dịch vụ Textract
+            - Effect: Allow
+              Action:
+                - textract:DetectDocumentText
+              Resource: "*"
+
 Outputs:
   ApiEndpoint:
     Description: "API Gateway endpoint URL to get upload link"
@@ -59,3 +74,6 @@ Outputs:
   BucketName:
     Description: "S3 Bucket Name for CVs"
     Value: !Ref CVUploadBucket
+  ExtractTextFunctionArn:
+    Description: "ARN of the Extract Text Lambda Function"
+    Value: !GetAtt ExtractTextFunction.Arn
