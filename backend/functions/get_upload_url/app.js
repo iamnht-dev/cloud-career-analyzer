@@ -8,18 +8,23 @@ exports.handler = async (event) => {
     try {
         const bucketName = process.env.UPLOAD_BUCKET;
         
-        // Tạo tên file ngẫu nhiên để không bị trùng (Vd: cvs/1a2b3c4d.pdf)
+        // Lấy tên ngành nghề từ query string do Frontend truyền xuống
+        // Nếu không có, mặc định là Cloud Engineer
+        const role = event.queryStringParameters?.role || "Cloud Engineer";
+        
         const fileId = crypto.randomBytes(8).toString("hex");
         const fileName = `cvs/${fileId}.pdf`;
 
-        // Định nghĩa lệnh upload
+        // Đính kèm Metadata (Nhãn dán) vào file PDF khi lưu lên S3
         const command = new PutObjectCommand({
             Bucket: bucketName,
             Key: fileName,
-            ContentType: "application/pdf"
+            ContentType: "application/pdf",
+            Metadata: {
+                "target-role": role // Dán nhãn ngành nghề cho AI sau này biết đường đọc
+            }
         });
 
-        // Lấy Presigned URL có thời hạn 5 phút (300 giây)
         const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
 
         return {
@@ -30,7 +35,8 @@ exports.handler = async (event) => {
             },
             body: JSON.stringify({
                 uploadUrl: uploadUrl,
-                fileName: fileName
+                fileName: fileName,
+                role: role
             })
         };
     } catch (error) {
