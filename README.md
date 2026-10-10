@@ -55,7 +55,7 @@ This project simulates a production-ready, 4-person team scale architecture, uti
 
 ## OpenAI CV analysis setup
 
-The `AnalyzeCVFunction` Lambda calls OpenAI's Responses API using `gpt-4.1-mini` by default. Set `OPENAI_API_KEY` in that Lambda's environment configuration in the AWS Console after deploying the stack. Keep the key out of the frontend, source control, and `samconfig.toml`. The function returns a clearly marked fallback result when the key is missing or the API call fails.
+The `AnalyzeCVFunction` Lambda calls OpenAI's Responses API using `gpt-4.1-mini` by default. Set `OPENAI_API_KEY` in that Lambda's environment configuration in the AWS Console after deploying the stack. Keep the key out of the frontend, source control, and `samconfig.toml`. The function returns a clearly marked fallback result when the key is missing or the API call fails. Since the key is configured manually in Lambda, add it again after each SAM deployment unless you move it into a managed secret configuration.
 
 You can set `OPENAI_MODEL` on the Lambda to select another model enabled for your OpenAI API project. API usage is billed separately from ChatGPT subscriptions; check the API project's billing and limits before using it with real CVs. CV text is sent to OpenAI for analysis.
 
