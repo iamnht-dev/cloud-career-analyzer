@@ -14,9 +14,15 @@ const streamToBuffer = (stream) =>
 
 exports.handler = async (event) => {
     try {
+        // Hỗ trợ cả 2 kiểu Event: Gọi trực tiếp hoặc gọi qua API Gateway
+        let payload = event;
+        if (event.body) {
+            payload = JSON.parse(event.body);
+        }
+
         // 1. Nhận thông tin bucket và tên file (key) từ Event truyền vào
-        const bucket = event.bucket || event.detail?.bucket?.name;
-        const key = event.key || event.detail?.object?.key;
+        const bucket = payload.bucket || payload.detail?.bucket?.name;
+        const key = payload.key || payload.detail?.object?.key;
 
         if (!bucket || !key) {
             throw new Error("Không tìm thấy thông tin S3 bucket hoặc tên file PDF.");
@@ -47,16 +53,29 @@ exports.handler = async (event) => {
         console.log("Trích xuất văn bản thành công!");
         console.log("Độ dài văn bản:", extractedText.length, "ký tự.");
 
-        // 4. Trả kết quả chữ thô và ngành nghề về để chuyển cho AI (Bedrock) chấm điểm sau này
+        // 4. Trả kết quả chuẩn API Gateway về cho Frontend
         return {
             statusCode: 200,
-            bucket: bucket,
-            key: key,
-            targetRole: role, // Chuyền ngành nghề đi tiếp
-            extractedText: extractedText
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                bucket: bucket,
+                key: key,
+                targetRole: role,
+                extractedText: extractedText
+            })
         };
     } catch (error) {
         console.error("Lỗi khi đọc file PDF:", error);
-        throw error;
+        return {
+            statusCode: 500,
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ error: error.message })
+        };
     }
 };

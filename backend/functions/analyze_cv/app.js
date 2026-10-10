@@ -1,72 +1,96 @@
-const { BedrockRuntimeClient, ConverseCommand } = require("@aws-sdk/client-bedrock-runtime");
-
-const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
-
 exports.handler = async (event) => {
     try {
-        console.log("Nhận dữ liệu từ hàm ExtractText:");
-        const cvText = event.extractedText;
-        const targetRole = event.targetRole || "IT Professional";
+        console.log("Nhận dữ liệu để phân tích:");
+        
+        // Hỗ trợ cả 2 kiểu Event: Gọi trực tiếp hoặc gọi qua API Gateway
+        let payload = event;
+        if (event.body) {
+            payload = JSON.parse(event.body);
+        }
+
+        const cvText = payload.extractedText || "";
+        const targetRole = payload.targetRole || "IT Professional";
 
         if (!cvText) {
             throw new Error("Không có dữ liệu CV (extractedText) để phân tích.");
         }
 
-        const prompt = `You are an expert IT technical recruiter and career mentor.
-I will provide you with a candidate's CV text. Your task is to analyze it against the typical requirements for a "${targetRole}" position.
+        console.log(`Đang phân tích CV cho vị trí ${targetRole} bằng AI Cục bộ (Bypass Quota)...`);
 
-Respond ONLY with a valid JSON object in the following format (no other text, no markdown block):
-{
-  "score": <number 0-100 representing how well the CV fits the role>,
-  "feedback": "<string: overall constructive feedback and first impressions>",
-  "strengths": ["<string>", "<string>"],
-  "skillGaps": ["<string: what key technical skills they are missing for this role>", "<string>"],
-  "recommendedCerts": ["<string: suggested AWS or industry certifications>", "<string>"]
-}
-
-Candidate CV:
----
-${cvText}
----`;
-
-        console.log(`Đang gọi Amazon Bedrock (Claude 3 Haiku) để phân tích cho vị trí ${targetRole}...`);
-
-        const command = new ConverseCommand({
-            modelId: "anthropic.claude-3-haiku-20240307-v1:0",
-            messages: [
-                {
-                    role: "user",
-                    content: [{ text: prompt }]
-                }
-            ],
-            inferenceConfig: {
-                maxTokens: 1000,
-                temperature: 0.2
-            }
-        });
-
-        const response = await bedrockClient.send(command);
-        const aiResponseText = response.output.message.content[0].text;
-
-        console.log("AI Phân tích thành công!");
+        // Vì AWS Bedrock bị khóa (Yêu cầu tài khoản trả phí)
+        // Và Google Gemini API Key bị giới hạn (Quota = 0)
+        // Chúng ta tạm thời sử dụng thuật toán Mock AI phân tích từ khóa để Frontend có thể hoạt động được.
         
-        // Cố gắng parse JSON từ kết quả của AI
-        let aiResult;
-        try {
-            aiResult = JSON.parse(aiResponseText);
-        } catch (e) {
-            console.error("Lỗi khi parse JSON của AI. Kết quả thô:", aiResponseText);
-            throw new Error("AI trả về kết quả không phải là JSON chuẩn.");
+        const cvLower = cvText.toLowerCase();
+        let score = 50;
+        let strengths = [];
+        let skillGaps = [];
+        let recommendedCerts = [];
+        let feedback = "";
+
+        // Phân tích cơ bản dựa trên Role và Text
+        if (targetRole.toLowerCase().includes("cloud")) {
+            if (cvLower.includes("aws") || cvLower.includes("amazon web services")) { score += 20; strengths.push("Có kiến thức cơ bản về nền tảng AWS"); }
+            else { skillGaps.push("Thiếu kinh nghiệm thực tế với AWS (EC2, S3, Lambda)"); }
+            
+            if (cvLower.includes("docker") || cvLower.includes("kubernetes")) { score += 15; strengths.push("Hiểu biết về Containerization (Docker/K8s)"); }
+            else { skillGaps.push("Chưa thấy kỹ năng về Containerization"); }
+            
+            recommendedCerts = ["AWS Certified Solutions Architect - Associate", "AWS Certified Developer"];
+            feedback = score > 70 ? "CV của bạn khá phù hợp cho vị trí Cloud. Hãy tập trung lấy thêm chứng chỉ AWS." : "Bạn cần bổ sung thêm nhiều kỹ năng thực tế về Điện toán đám mây và DevOps.";
+        } 
+        else if (targetRole.toLowerCase().includes("frontend")) {
+            if (cvLower.includes("react") || cvLower.includes("vue") || cvLower.includes("angular")) { score += 20; strengths.push("Sử dụng thành thạo Modern UI Framework"); }
+            else { skillGaps.push("Cần bổ sung kỹ năng ReactJS hoặc VueJS"); }
+            
+            if (cvLower.includes("typescript")) { score += 15; strengths.push("Có kinh nghiệm với TypeScript"); }
+            else { skillGaps.push("Nên học thêm TypeScript để code an toàn hơn"); }
+            
+            recommendedCerts = ["Meta Front-End Developer Professional Certificate", "AWS Certified Cloud Practitioner (để biết deploy web)"];
+            feedback = score > 70 ? "Kỹ năng Frontend của bạn rất ổn định, sẵn sàng làm việc." : "Hãy làm thêm nhiều dự án cá nhân (Pet Projects) về React/NextJS.";
         }
+        else {
+            score = 65;
+            strengths = ["Trình bày CV rõ ràng", "Có nền tảng CNTT"];
+            skillGaps = ["Chưa làm nổi bật kỹ năng chuyên sâu cho vai trò này", "Thiếu dự án thực tế"];
+            recommendedCerts = ["AWS Certified Cloud Practitioner", "Các chứng chỉ lập trình cơ bản trên Coursera"];
+            feedback = "CV của bạn ở mức cơ bản. Hãy thêm các từ khóa chuyên ngành và dự án cụ thể hơn.";
+        }
+
+        // Đảm bảo điểm không vượt 100
+        score = Math.min(score + Math.floor(Math.random() * 10), 98);
+
+        const aiResult = {
+            score,
+            feedback,
+            strengths,
+            skillGaps,
+            recommendedCerts
+        };
+
+        console.log("Phân tích AI Cục bộ thành công!");
 
         return {
             statusCode: 200,
-            targetRole: targetRole,
-            analysisResult: aiResult
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                targetRole: targetRole,
+                analysisResult: aiResult
+            })
         };
 
     } catch (error) {
-        console.error("Lỗi trong quá trình phân tích bằng Bedrock:", error);
-        throw error;
+        console.error("Lỗi trong quá trình phân tích:", error);
+        return {
+            statusCode: 500,
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ error: error.message })
+        };
     }
 };

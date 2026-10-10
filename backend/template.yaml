@@ -61,8 +61,14 @@ Resources:
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref CVUploadBucket
+      Events:
+        ExtractApi:
+          Type: Api
+          Properties:
+            Path: /extract
+            Method: post
 
-  # 4. Lambda function to analyze CV using Amazon Bedrock AI
+  # 4. Lambda function to analyze CV using Amazon Bedrock AI / Gemini
   AnalyzeCVFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -74,6 +80,54 @@ Resources:
               Action:
                 - bedrock:InvokeModel
               Resource: "*"
+      Events:
+        AnalyzeApi:
+          Type: Api
+          Properties:
+            Path: /analyze
+            Method: post
+
+  # 5. Private-by-session analysis history (no CV text is stored)
+  AnalysisHistoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sessionId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sessionId
+          KeyType: HASH
+        - AttributeName: createdAt
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  AnalysisHistoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/analysis_history/
+      Handler: app.handler
+      Environment:
+        Variables:
+          HISTORY_TABLE: !Ref AnalysisHistoryTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnalysisHistoryTable
+      Events:
+        SaveHistory:
+          Type: Api
+          Properties:
+            Path: /analysis-history
+            Method: post
+        GetHistory:
+          Type: Api
+          Properties:
+            Path: /analysis-history
+            Method: get
 
 Outputs:
   ApiEndpoint:
@@ -82,3 +136,6 @@ Outputs:
   BucketName:
     Description: "S3 Bucket Name for CVs"
     Value: !Ref CVUploadBucket
+  AnalysisHistoryTableName:
+    Description: "DynamoDB table for analysis history"
+    Value: !Ref AnalysisHistoryTable
