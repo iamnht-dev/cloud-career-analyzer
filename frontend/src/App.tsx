@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, FileCheck, Target, Award, Cloud, Loader2, CheckCircle, Briefcase, RefreshCw, XCircle, CheckSquare } from 'lucide-react';
+import { Upload, Target, Award, Cloud, Loader2, CheckCircle, Briefcase, RefreshCw, XCircle, CheckSquare } from 'lucide-react';
 
 const ROLES = [
   "Cloud Engineer",
@@ -23,9 +23,10 @@ const getSessionId = () => {
 function App() {
   const [file, setFile] = useState<File | null>(null);
   const [role, setRole] = useState(ROLES[0]);
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [analysisProvider, setAnalysisProvider] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [progressStep, setProgressStep] = useState('');
-  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -61,7 +62,6 @@ function App() {
         return;
       }
       setFile(selectedFile);
-      setUploadSuccess(false);
       setAnalysisResult(null);
     }
   };
@@ -73,7 +73,6 @@ function App() {
     }
 
     setIsUploading(true);
-    setUploadSuccess(false);
     setAnalysisResult(null);
 
     try {
@@ -110,20 +109,21 @@ function App() {
       const extractData = await extractRes.json();
 
       // 4. Phân tích CV (AnalyzeCV)
-      setProgressStep('Gemini AI đang chấm điểm CV của bạn...');
+      setProgressStep('AI đang phân tích CV của bạn...');
       const analyzeRes = await fetch(`${baseUrl}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           extractedText: extractData.extractedText, 
-          targetRole: extractData.targetRole 
+          targetRole: extractData.targetRole || role,
+          customInstructions
         })
       });
       if (!analyzeRes.ok) throw new Error("Lỗi khi phân tích AI.");
       const analyzeData = await analyzeRes.json();
 
       setAnalysisResult(analyzeData.analysisResult);
-      setUploadSuccess(true);
+      setAnalysisProvider(analyzeData.analysisProvider || 'mock');
 
       // Save the result only; extracted CV text and the uploaded PDF are never sent to this endpoint.
       try {
@@ -153,7 +153,8 @@ function App() {
   const resetForm = () => {
     setFile(null);
     setAnalysisResult(null);
-    setUploadSuccess(false);
+    setAnalysisProvider(null);
+    setCustomInstructions('');
   };
 
   return (
@@ -176,7 +177,7 @@ function App() {
               <ul className="divide-y divide-slate-100">
                 {history.map((item) => (
                   <li key={item.analysisId}>
-                    <button className="w-full py-3 flex items-center justify-between text-left hover:bg-slate-50" onClick={() => { setRole(item.targetRole); setAnalysisResult(item); setShowHistory(false); }}>
+                    <button className="w-full py-3 flex items-center justify-between text-left hover:bg-slate-50" onClick={() => { setRole(item.targetRole); setAnalysisResult(item); setAnalysisProvider(null); setShowHistory(false); }}>
                       <span><strong>{item.targetRole}</strong><span className="block text-sm text-slate-500">{new Date(item.createdAt).toLocaleString()}</span></span>
                       <span className="font-bold text-indigo-600">{item.score}/100</span>
                     </button>
@@ -207,6 +208,19 @@ function App() {
               >
                 {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
+            </div>
+
+            <div className="max-w-xl mx-auto mb-6 text-left">
+              <label htmlFor="custom-instructions" className="block text-sm font-semibold text-slate-700 mb-2">JD hoặc yêu cầu đánh giá riêng (không bắt buộc)</label>
+              <textarea
+                id="custom-instructions"
+                value={customInstructions}
+                onChange={(e) => setCustomInstructions(e.target.value)}
+                maxLength={5000}
+                rows={4}
+                placeholder="Dán JD hoặc mô tả tiêu chí bạn muốn AI tập trung, ví dụ: đánh giá CV cho vị trí Marketing Executive..."
+                className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-y"
+              />
             </div>
 
             <div 
@@ -245,6 +259,7 @@ function App() {
             <div className="bg-gradient-to-r from-indigo-600 to-blue-500 p-8 text-white text-center relative">
               <h2 className="text-3xl font-bold mb-2">AI Analysis Complete</h2>
               <p className="text-indigo-100 opacity-90">Target Role: {role}</p>
+              <p className="text-indigo-100 text-sm mt-2">{analysisProvider === 'openai' ? 'Phân tích bởi OpenAI' : analysisProvider === 'mock' ? 'Kết quả dự phòng (AI chưa khả dụng)' : 'Nguồn phân tích không được lưu trong lịch sử'}</p>
               
               <div className="mt-8 flex justify-center">
                 <div className="w-32 h-32 rounded-full bg-white flex items-center justify-center border-4 border-indigo-200 shadow-lg relative">

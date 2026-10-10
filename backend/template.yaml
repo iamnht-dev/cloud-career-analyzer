@@ -68,18 +68,15 @@ Resources:
             Path: /extract
             Method: post
 
-  # 4. Lambda function to analyze CV using Amazon Bedrock AI / Gemini
+  # 4. Lambda function to analyze CV using OpenAI API
   AnalyzeCVFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/analyze_cv/
       Handler: app.handler
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - bedrock:InvokeModel
-              Resource: "*"
+      Environment:
+        Variables:
+          OPENAI_MODEL: gpt-4.1-mini
       Events:
         AnalyzeApi:
           Type: Api

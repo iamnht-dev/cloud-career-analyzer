@@ -36,7 +36,7 @@ This project simulates a production-ready, 4-person team scale architecture, uti
 [AWS Step Functions] 
    ├── Step 1: [Amazon S3] (Store PDF)
    ├── Step 2: [Amazon Textract] (Extract Text async)
-   ├── Step 3: [Amazon Bedrock] (AI Analysis - Parallel processing for Skills, Certs, Gaps)
+   ├── Step 3: [OpenAI API] (AI Analysis through the AnalyzeCV Lambda)
    └── Step 4: [Lambda] (Aggregate & Format Results)
 
 [Storage & Delivery]
@@ -44,6 +44,7 @@ This project simulates a production-ready, 4-person team scale architecture, uti
    └── [Amazon SNS] (Email Notification)
 
 [Data Analytics Pipeline (For Admin/Business Insights)]
+
 [DynamoDB Streams] → [Kinesis Firehose] → [S3 Data Lake] → [Amazon Athena]
 (Query aggregate data: e.g., "Most lacking AWS skills among applicants")
 
@@ -51,6 +52,12 @@ This project simulates a production-ready, 4-person team scale architecture, uti
 [Amazon CloudWatch] (Logs & Metrics)
 [AWS SAM / CloudFormation] (Infrastructure as Code)
 ```
+
+## OpenAI CV analysis setup
+
+The `AnalyzeCVFunction` Lambda calls OpenAI's Responses API using `gpt-4.1-mini` by default. Set `OPENAI_API_KEY` in that Lambda's environment configuration in the AWS Console after deploying the stack. Keep the key out of the frontend, source control, and `samconfig.toml`. The function returns a clearly marked fallback result when the key is missing or the API call fails.
+
+You can set `OPENAI_MODEL` on the Lambda to select another model enabled for your OpenAI API project. API usage is billed separately from ChatGPT subscriptions; check the API project's billing and limits before using it with real CVs. CV text is sent to OpenAI for analysis.
 
 ### 🌟 Key Enterprise Features
 1. **AWS Step Functions Orchestration:** Replaces monolithic Lambda functions with a visual, stateful workflow, enabling easy retries, error handling, and parallel AI processing.

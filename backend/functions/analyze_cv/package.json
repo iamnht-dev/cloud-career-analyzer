@@ -1,9 +1,6 @@
 {
   "name": "analyze_cv",
   "version": "1.0.0",
-  "description": "Analyze CV text using Amazon Bedrock",
-  "main": "app.js",
-  "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.500.0"
-  }
+  "description": "Analyze CV text using OpenAI API",
+  "main": "app.js"
 }
