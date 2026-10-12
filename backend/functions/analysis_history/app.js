@@ -24,11 +24,9 @@ exports.handler = async (event) => {
   try {
     if (event.httpMethod === "POST") {
       const payload = JSON.parse(event.body || "{}");
-      const { sessionId, targetRole, score, feedback, strengths, skillGaps, recommendedCerts } = payload;
-
-      if (!/^[a-f0-9-]{36}$/i.test(sessionId || "")) {
-        return response(400, { error: "Invalid sessionId." });
-      }
+      const userId = event.requestContext?.authorizer?.claims?.sub;
+      if (!userId) return response(401, { error: "Sign-in required." });
+      const { targetRole, score, feedback, strengths, skillGaps, recommendedCerts } = payload;
       if (typeof targetRole !== "string" || typeof score !== "number" ||
           typeof feedback !== "string" || !Array.isArray(strengths) ||
           !Array.isArray(skillGaps) || !Array.isArray(recommendedCerts)) {
@@ -36,7 +34,7 @@ exports.handler = async (event) => {
       }
 
       const item = {
-        sessionId,
+        sessionId: userId,
         createdAt: new Date().toISOString(),
         analysisId: randomUUID(),
         targetRole: targetRole.slice(0, 100),
@@ -53,14 +51,12 @@ exports.handler = async (event) => {
     }
 
     if (event.httpMethod === "GET") {
-      const sessionId = event.queryStringParameters?.sessionId;
-      if (!/^[a-f0-9-]{36}$/i.test(sessionId || "")) {
-        return response(400, { error: "Invalid sessionId." });
-      }
+      const userId = event.requestContext?.authorizer?.claims?.sub;
+      if (!userId) return response(401, { error: "Sign-in required." });
       const result = await dynamo.send(new QueryCommand({
         TableName: TABLE_NAME,
         KeyConditionExpression: "sessionId = :sessionId",
-        ExpressionAttributeValues: { ":sessionId": sessionId },
+        ExpressionAttributeValues: { ":sessionId": userId },
         ScanIndexForward: false,
         Limit: 50,
       }));

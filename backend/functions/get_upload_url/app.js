@@ -7,13 +7,15 @@ const s3Client = new S3Client({ region: process.env.AWS_REGION });
 exports.handler = async (event) => {
     try {
         const bucketName = process.env.UPLOAD_BUCKET;
+        const userId = event.requestContext?.authorizer?.claims?.sub;
+        if (!userId) return { statusCode: 401, body: JSON.stringify({ error: "Sign-in required." }) };
         
         // Lấy tên ngành nghề từ query string do Frontend truyền xuống
         // Nếu không có, mặc định là Cloud Engineer
         const role = event.queryStringParameters?.role || "Cloud Engineer";
         
         const fileId = crypto.randomBytes(8).toString("hex");
-        const fileName = `cvs/${fileId}.pdf`;
+        const fileName = `cvs/${userId}/${fileId}.pdf`;
 
         // Đính kèm Metadata (Nhãn dán) vào file PDF khi lưu lên S3
         const command = new PutObjectCommand({

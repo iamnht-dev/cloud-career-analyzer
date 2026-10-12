@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Upload, Target, Award, Cloud, Loader2, CheckCircle, Briefcase, RefreshCw, XCircle, CheckSquare } from 'lucide-react';
+import { confirmSignUp, currentUserEmail, getIdToken, resendConfirmationCode, signIn, signOut, signUp } from './cognito';
 
 const ROLES = [
   "Cloud Engineer",
@@ -10,17 +11,15 @@ const ROLES = [
   "DevOps Engineer"
 ];
 
-const HISTORY_SESSION_KEY = 'cloud-career-analyzer-session';
-const getSessionId = () => {
-  let id = localStorage.getItem(HISTORY_SESSION_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(HISTORY_SESSION_KEY, id);
-  }
-  return id;
-};
-
 function App() {
+  const [authReady, setAuthReady] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'confirm'>('signin');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [confirmationCode, setConfirmationCode] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [role, setRole] = useState(ROLES[0]);
   const [customInstructions, setCustomInstructions] = useState('');
@@ -33,12 +32,61 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let active = true;
+    const loadSession = async () => {
+      const token = await getIdToken();
+      if (active) {
+        setUserEmail(token ? currentUserEmail() : '');
+        setAuthReady(true);
+      }
+    };
+    const onSessionChange = () => {
+      setUserEmail(currentUserEmail());
+      setAuthReady(true);
+    };
+    window.addEventListener('cognito-session-change', onSessionChange);
+    loadSession();
+    return () => {
+      active = false;
+      window.removeEventListener('cognito-session-change', onSessionChange);
+    };
+  }, []);
+
+  const handleAuth = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAuthBusy(true);
+    setAuthError('');
+    try {
+      if (authMode === 'signup') {
+        await signUp(authEmail, authPassword);
+        setAuthMode('confirm');
+      } else if (authMode === 'confirm') {
+        await confirmSignUp(authEmail, confirmationCode);
+        setAuthMode('signin');
+        setAuthPassword('');
+        setConfirmationCode('');
+        setAuthError('Email đã được xác nhận. Hãy đăng nhập để tiếp tục.');
+      } else {
+        await signIn(authEmail, authPassword);
+        setUserEmail(currentUserEmail());
+      }
+    } catch (error: any) {
+      setAuthError(error.message || 'Không thể xác thực tài khoản.');
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!userEmail) return;
     const loadHistory = async () => {
       try {
         const apiUrl = import.meta.env.VITE_API_URL;
         if (!apiUrl) return;
+        const token = await getIdToken();
+        if (!token) return;
         const baseUrl = apiUrl.replace(/\/upload-url\/?$/, '');
-        const response = await fetch(`${baseUrl}/analysis-history?sessionId=${encodeURIComponent(getSessionId())}`);
+        const response = await fetch(`${baseUrl}/analysis-history`, { headers: { Authorization: `Bearer ${token}` } });
         if (response.ok) {
           const data = await response.json();
           setHistory(data.items || []);
@@ -48,7 +96,7 @@ function App() {
       }
     };
     loadHistory();
-  }, []);
+  }, [userEmail]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -78,10 +126,12 @@ function App() {
     try {
       const apiUrl = import.meta.env.VITE_API_URL;
       const baseUrl = apiUrl.replace('/upload-url', '');
+      const token = await getIdToken();
+      if (!token) throw new Error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
       
       // 1. Lấy Presigned URL
       setProgressStep('Đang chuẩn bị luồng bảo mật (AWS S3)...');
-      const response = await fetch(`${apiUrl}?role=${encodeURIComponent(role)}`);
+      const response = await fetch(`${apiUrl}?role=${encodeURIComponent(role)}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) throw new Error("Không thể kết nối đến máy chủ.");
       const data = await response.json();
       const { uploadUrl, fileName } = data;
@@ -102,7 +152,7 @@ function App() {
       setProgressStep('Đang bóc tách chữ từ file PDF...');
       const extractRes = await fetch(`${baseUrl}/extract`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ bucket, key: fileName })
       });
       if (!extractRes.ok) throw new Error("Lỗi khi đọc file PDF.");
@@ -112,7 +162,7 @@ function App() {
       setProgressStep('AI đang phân tích CV của bạn...');
       const analyzeRes = await fetch(`${baseUrl}/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ 
           extractedText: extractData.extractedText, 
           targetRole: extractData.targetRole || role,
@@ -129,8 +179,8 @@ function App() {
       try {
         const historyRes = await fetch(`${baseUrl}/analysis-history`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: getSessionId(), targetRole: role, ...analyzeData.analysisResult })
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ targetRole: role, ...analyzeData.analysisResult })
         });
         if (historyRes.ok) {
           const saved = await historyRes.json();
@@ -157,6 +207,40 @@ function App() {
     setCustomInstructions('');
   };
 
+  if (!authReady) {
+    return <div className="min-h-screen flex items-center justify-center text-indigo-600"><Loader2 className="animate-spin mr-2" /> Đang kiểm tra phiên đăng nhập...</div>;
+  }
+
+  if (!userEmail) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-5 py-10">
+        <form onSubmit={handleAuth} className="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-xl p-8 space-y-5">
+          <div className="text-center">
+            <Cloud size={38} className="text-indigo-600 mx-auto mb-3" />
+            <h1 className="text-2xl font-bold text-slate-900">Career<span className="text-indigo-600">AI</span></h1>
+            <p className="text-slate-500 mt-2">{authMode === 'signup' ? 'Tạo tài khoản để lưu lịch sử phân tích CV.' : authMode === 'confirm' ? 'Nhập mã xác nhận đã gửi đến email của bạn.' : 'Đăng nhập để phân tích CV và xem lại lịch sử.'}</p>
+          </div>
+          <label className="block text-sm font-medium text-slate-700">Email
+            <input type="email" required autoComplete="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} disabled={authMode === 'confirm'} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3" />
+          </label>
+          {authMode !== 'confirm' && <label className="block text-sm font-medium text-slate-700">Mật khẩu
+            <input type="password" required minLength={authMode === 'signup' ? 8 : undefined} autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3" />
+          </label>}
+          {authMode === 'confirm' && <label className="block text-sm font-medium text-slate-700">Mã xác nhận
+            <input required inputMode="numeric" value={confirmationCode} onChange={(e) => setConfirmationCode(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3" />
+          </label>}
+          {authError && <p role="alert" className="text-sm text-red-600">{authError}</p>}
+          <button disabled={authBusy} className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-3 disabled:opacity-60">{authBusy ? 'Đang xử lý...' : authMode === 'signup' ? 'Tạo tài khoản' : authMode === 'confirm' ? 'Xác nhận email' : 'Đăng nhập'}</button>
+          {authMode === 'confirm' ? (
+            <button type="button" onClick={async () => { setAuthError(''); try { await resendConfirmationCode(authEmail); setAuthError('Đã gửi lại mã xác nhận.'); } catch (error: any) { setAuthError(error.message); } }} className="w-full text-sm text-indigo-700 hover:underline">Gửi lại mã xác nhận</button>
+          ) : (
+            <button type="button" onClick={() => { setAuthError(''); setAuthMode(authMode === 'signin' ? 'signup' : 'signin'); }} className="w-full text-sm text-indigo-700 hover:underline">{authMode === 'signup' ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký'}</button>
+          )}
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       <nav className="flex items-center justify-between px-8 py-4 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50">
@@ -164,9 +248,13 @@ function App() {
           <Cloud size={32} />
           <span className="text-xl font-bold tracking-tight text-slate-800">Career<span className="text-indigo-600">AI</span></span>
         </div>
-        <button onClick={() => setShowHistory((visible) => !visible)} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium">
-          History ({history.length})
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowHistory((visible) => !visible)} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium">
+            History ({history.length})
+          </button>
+          <span className="hidden sm:inline text-sm text-slate-500">{userEmail}</span>
+          <button onClick={() => { signOut(); setHistory([]); setAnalysisResult(null); }} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium">Đăng xuất</button>
+        </div>
       </nav>
 
       {showHistory && (

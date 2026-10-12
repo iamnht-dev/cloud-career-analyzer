@@ -20,11 +20,14 @@ exports.handler = async (event) => {
             payload = JSON.parse(event.body);
         }
 
+        const userId = event.requestContext?.authorizer?.claims?.sub;
+        if (!userId) return { statusCode: 401, body: JSON.stringify({ error: "Sign-in required." }) };
+
         // 1. Nhận thông tin bucket và tên file (key) từ Event truyền vào
         const bucket = payload.bucket || payload.detail?.bucket?.name;
         const key = payload.key || payload.detail?.object?.key;
 
-        if (!bucket || !key) {
+        if (!bucket || !key || bucket !== process.env.UPLOAD_BUCKET || !key.startsWith(`cvs/${userId}/`)) {
             throw new Error("Không tìm thấy thông tin S3 bucket hoặc tên file PDF.");
         }
 
