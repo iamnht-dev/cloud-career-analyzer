@@ -259,7 +259,7 @@ function App() {
             <div className="bg-gradient-to-r from-indigo-600 to-blue-500 p-8 text-white text-center relative">
               <h2 className="text-3xl font-bold mb-2">AI Analysis Complete</h2>
               <p className="text-indigo-100 opacity-90">Target Role: {role}</p>
-              <p className="text-indigo-100 text-sm mt-2">{analysisProvider === 'openai' ? 'Phân tích bởi OpenAI' : analysisProvider === 'mock' ? 'Kết quả dự phòng (AI chưa khả dụng)' : 'Nguồn phân tích không được lưu trong lịch sử'}</p>
+              <p className="text-indigo-100 text-sm mt-2">{analysisProvider === 'openai' ? 'Phân tích bởi OpenAI' : analysisProvider === 'groq' ? 'Phân tích bởi Groq' : analysisProvider === 'mock' ? 'Kết quả dự phòng (AI chưa khả dụng)' : 'Nguồn phân tích không được lưu trong lịch sử'}</p>
               
               <div className="mt-8 flex justify-center">
                 <div className="w-32 h-32 rounded-full bg-white flex items-center justify-center border-4 border-indigo-200 shadow-lg relative">
