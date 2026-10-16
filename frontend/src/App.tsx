@@ -253,7 +253,7 @@ function App() {
             History ({history.length})
           </button>
           <span className="hidden sm:inline text-sm text-slate-500">{userEmail}</span>
-          <button onClick={() => { signOut(); setHistory([]); setAnalysisResult(null); }} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium">Đăng xuất</button>
+          <button onClick={async () => { await signOut(); setHistory([]); setAnalysisResult(null); }} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium">Đăng xuất</button>
         </div>
       </nav>
 

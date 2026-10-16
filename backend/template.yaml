@@ -8,7 +8,7 @@ Globals:
   Function:
     Timeout: 30
     MemorySize: 256
-    Runtime: nodejs20.x
+    Runtime: nodejs24.x
     Architectures:
       - x86_64
   Api:
@@ -121,6 +121,27 @@ Resources:
       Environment:
         Variables:
           OPENAI_MODEL: gpt-4.1-mini
+          OPENAI_PARAMETER_NAME: /cloud-career-analyzer/OPENAI_API_KEY
+          GROQ_PARAMETER_NAME: /cloud-career-analyzer/GROQ_API_KEY
+      Layers:
+        - !Sub '{{resolve:ssm:/aws/service/aws-parameters-and-secrets-lambda-extension/x86/latest}}'
+      Policies:
+        - Statement:
+            - Sid: ReadGroqParameter
+              Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource:
+                - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cloud-career-analyzer/GROQ_API_KEY
+                - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cloud-career-analyzer/OPENAI_API_KEY
+            - Sid: DecryptGroqParameter
+              Effect: Allow
+              Action:
+                - kms:Decrypt
+              Resource: !Sub arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
       Events:
         AnalyzeApi:
           Type: Api
@@ -128,7 +149,7 @@ Resources:
             Path: /analyze
             Method: post
 
-  # 5. Private-by-session analysis history (no CV text is stored)
+  # 5. Per-user analysis history (CV text is not stored)
   AnalysisHistoryTable:
     Type: AWS::DynamoDB::Table
     Properties:

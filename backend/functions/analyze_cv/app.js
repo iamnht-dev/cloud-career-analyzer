@@ -1,7 +1,6 @@
 const PROVIDERS = {
   groq: {
     url: "https://api.groq.com/openai/v1/responses",
-    key: () => process.env.GROQ_API_KEY,
     model: () => process.env.GROQ_MODEL || "openai/gpt-oss-20b"
   },
   openai: {
@@ -11,6 +10,20 @@ const PROVIDERS = {
   }
 };
 const MAX_CV_CHARS = 30000;
+
+async function loadProviderApiKey(environmentName, parameterEnvironmentName, optional = false) {
+  if (process.env[environmentName]) return process.env[environmentName];
+  const parameterName = process.env[parameterEnvironmentName];
+  if (!parameterName) return null;
+
+  const response = await fetch(`http://localhost:2773/systemsmanager/parameters/get/?name=${encodeURIComponent(parameterName)}&withDecryption=true`, {
+    headers: { "X-Aws-Parameters-Secrets-Token": process.env.AWS_SESSION_TOKEN || "" }
+  });
+  if (optional && response.status === 400) return null;
+  if (!response.ok) throw new Error(`Unable to read ${environmentName} from Parameter Store (${response.status})`);
+  const data = await response.json();
+  return data.Parameter?.Value || null;
+}
 
 function normalizeResult(result) {
   if (!result || typeof result !== "object") throw new Error("Invalid analysis response");
@@ -35,15 +48,16 @@ function makeMockResult(targetRole) {
   };
 }
 
-async function analyzeWithProvider(providerName, cvText, targetRole, customInstructions) {
+async function analyzeWithProvider(providerName, cvText, targetRole, customInstructions, providerApiKey) {
   const provider = PROVIDERS[providerName];
+  const apiKey = providerApiKey;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 22000);
   try {
     const response = await fetch(provider.url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${provider.key()}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json"
       },
       signal: controller.signal,
@@ -86,10 +100,23 @@ exports.handler = async (event) => {
 
     let analysisResult;
     let analysisProvider;
-    const providerName = process.env.GROQ_API_KEY ? "groq" : process.env.OPENAI_API_KEY ? "openai" : null;
+    let groqApiKey = null;
+    try {
+      groqApiKey = await loadProviderApiKey("GROQ_API_KEY", "GROQ_PARAMETER_NAME");
+    } catch (error) {
+      console.error("Unable to load Groq API key", error.message);
+    }
+    let openAiApiKey = null;
+    try {
+      openAiApiKey = await loadProviderApiKey("OPENAI_API_KEY", "OPENAI_PARAMETER_NAME", true);
+    } catch (error) {
+      console.error("Unable to load OpenAI API key", error.message);
+    }
+    const providerName = groqApiKey ? "groq" : openAiApiKey ? "openai" : null;
     if (providerName) {
       try {
-        analysisResult = await analyzeWithProvider(providerName, cvText, targetRole, customInstructions);
+        const providerApiKey = providerName === "groq" ? groqApiKey : openAiApiKey;
+        analysisResult = await analyzeWithProvider(providerName, cvText, targetRole, customInstructions, providerApiKey);
         analysisProvider = providerName;
       } catch (error) {
         console.error(`${providerName} analysis failed; using fallback`, error.message);

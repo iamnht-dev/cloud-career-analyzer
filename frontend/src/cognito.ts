@@ -106,7 +106,15 @@ export async function getIdToken(): Promise<string | null> {
   }
 }
 
-export function signOut() {
+export async function signOut() {
+  const session = readSession();
+  if (session?.accessToken) {
+    try {
+      await cognitoRequest('GlobalSignOut', { AccessToken: session.accessToken });
+    } catch {
+      // Clear the local session even if the access token has already expired.
+    }
+  }
   saveSession(null);
 }
 

@@ -1,102 +1,104 @@
 # Cloud Career Readiness Analyzer
 
-A React web app that reads a PDF CV and evaluates it for a selected role. Users can also provide a job description or extra instructions, so the analysis is not limited to the built-in IT roles.
+A React and TypeScript app that analyzes a PDF CV against a selected role, job description, or custom instructions. Users can create an account, analyze CVs, and view their own analysis history.
 
-![AWS](https://img.shields.io/badge/AWS-SAM-orange?logo=amazonaws)
-![React](https://img.shields.io/badge/React-19-blue?logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-React-blue?logo=typescript)
+## Features
 
-## What it does
+- Email registration, verification, sign-in, and token refresh with Amazon Cognito.
+- PDF upload up to 5 MB through a short-lived Amazon S3 presigned URL.
+- CV text extraction in AWS Lambda with `pdf-parse`.
+- AI feedback with a score, summary, strengths, skill gaps, and suggested certifications.
+- Per-user analysis history in DynamoDB, automatically expired after 90 days.
+- Uploaded PDFs are scoped to the owner and stored in S3. Configure an S3 lifecycle policy if automatic cleanup is needed.
 
-- Accepts PDF files up to 5 MB.
-- Uploads the PDF to an S3 bucket using a presigned URL.
-- Extracts text in Lambda with `pdf-parse`.
-- Evaluates the CV against a selected role and optional job description or custom instructions.
-- Returns a score, summary, strengths, skill gaps, and recommended certifications.
-- Saves analysis results to DynamoDB history for up to 90 days. CV text is not saved in the history table.
-
-## Current architecture
+## Architecture
 
 ```text
-React + TypeScript app (Vite; email sign-up/sign-in with Amazon Cognito)
-  └─ Cognito ID token ──> API Gateway Cognito authorizer protects API routes
-  │
-  ├─ GET /upload-url ──> Lambda creates a 5-minute S3 presigned URL
-  │                         └─ Browser uploads PDF directly to S3
-  ├─ POST /extract ─────> Lambda downloads PDF and extracts text with pdf-parse
-  ├─ POST /analyze ─────> Lambda calls Groq, or OpenAI if no Groq key is set
-  │                         └─ Uses a labeled mock result if no provider works
-  └─ GET/POST /analysis-history ──> Lambda reads/writes result records in DynamoDB
+React + TypeScript (Vite)
+  | Cognito ID token
+API Gateway + Cognito User Pool authorizer
+  |-- GET /upload-url -> Lambda -> S3 presigned upload (user-scoped key)
+  |-- POST /extract -> Lambda -> S3 PDF ownership check -> pdf-parse
+  |-- POST /analyze -> Lambda -> Groq / OpenAI / mock fallback
+  `-- GET,POST /analysis-history -> Lambda -> DynamoDB (partitioned by Cognito sub)
 
-AWS SAM / CloudFormation provisions the API Gateway, Lambda functions, S3 bucket,
-and DynamoDB table. Lambda logs go to CloudWatch.
+AWS SAM / CloudFormation provisions Cognito, API Gateway, Lambda, S3, and DynamoDB.
+CloudWatch stores Lambda logs.
 ```
 
-The deployed analysis Lambda currently prefers Groq when `GROQ_API_KEY` is set. It uses Groq's `openai/gpt-oss-20b` model by default. If no Groq key is present, it tries OpenAI with `gpt-4.1-mini` when `OPENAI_API_KEY` is set. Set `GROQ_MODEL` or `OPENAI_MODEL` to select another model supported by the selected provider. If the provider call fails, the API returns a clearly labeled mock result; it does not switch from a failed Groq request to OpenAI automatically.
+The analyzer uses Groq first when its SecureString is available in Systems Manager Parameter Store. It uses OpenAI if its optional SecureString is available and Groq is unavailable. If an AI provider call fails, the API returns a labeled mock result.
 
-## Data and current limitations
+## Data and limitations
 
-- CV text is sent to the selected model provider (Groq or OpenAI) for analysis. Use CVs only when you are comfortable sending their contents to that provider.
-- Uploaded PDFs are stored in S3. The current SAM template has no S3 lifecycle rule to delete them automatically.
-- Cognito email sign-up requires email confirmation. The public app client has no client secret; API requests use the user's Cognito ID token. Session tokens are stored in browser local storage.
-- History is partitioned by the authenticated Cognito user ID (`sub`), and uploaded PDF object keys are scoped to that user. The extract endpoint checks ownership.
-- The API allows requests from any origin through CORS. Restrict CORS to the deployed frontend origin before using this as a public production service.
-- The preset role list contains Cloud Engineer, Frontend Developer, Backend Developer, Fullstack Developer, Data Analyst, and DevOps Engineer. The optional instructions field can specify another role or include a JD.
-- The current deployment uses `pdf-parse` and Cognito User Pools; it does not use Amazon Textract, Step Functions, SNS, Kinesis, or Athena.
+- CV text is sent to the selected AI provider for analysis. Avoid uploading CVs unless you are comfortable sharing their contents with that provider.
+- Analysis history stores feedback and scores, not CV text, and expires after 90 days.
+- Uploaded PDF files remain in S3 until deleted or an S3 lifecycle policy is configured.
+- Cognito tokens are stored in browser local storage. Keep the frontend free from provider API keys.
+- API CORS currently allows all origins. Restrict it to the hosted frontend domain before public production use.
+- The current architecture does not use Textract, Step Functions, SNS, Kinesis, or Athena.
 
-## Configure an AI provider
+## Requirements
 
-Set the provider key as an environment variable on the `AnalyzeCVFunction` Lambda in the AWS Console. For the current Groq setup, add `GROQ_API_KEY`. Do not put API keys in the frontend, source control, or `samconfig.toml`.
+- Node.js 24 and npm
+- AWS CLI and AWS SAM CLI
+- AWS credentials with permission to deploy the SAM stack
+- A Groq API key (optional OpenAI API key fallback)
 
-The key is currently configured manually in Lambda and is not managed by the SAM template. A later `sam deploy` can replace the Lambda environment variables, so re-add the key after deploying unless you move it to a managed secret configuration.
+## Configure the AI key
 
-## Run locally
+Store the Groq key as an AWS Systems Manager Parameter Store `SecureString` named `/cloud-career-analyzer/GROQ_API_KEY`. To enable the optional OpenAI fallback, store its key as `/cloud-career-analyzer/OPENAI_API_KEY`, also as a `SecureString`. The Lambda reads these through the AWS Parameters and Secrets Lambda Extension; SAM grants access to the two parameters. Do not put keys in source control, frontend variables, or `samconfig.toml`.
 
-Prerequisites: Node.js, npm, and the deployed backend API URL. AWS CLI credentials are needed only when deploying the backend.
+If a provider key is currently configured directly on the deployed Lambda, migrate it to the matching SecureString parameter before deploying this template. The migration should read the current value through the AWS CLI without printing it. Keep keys out of terminal logs and chat.
 
-Copy `frontend/.env.example` to `frontend/.env`. Set the API URL and Cognito client ID from the SAM stack outputs:
+## Deploy the backend
+
+Use an AWS CLI profile with permission to deploy the stack, then build and deploy from `backend/`:
+
+```powershell
+cd backend
+sam build
+sam deploy --profile default --no-confirm-changeset
+```
+
+The SAM stack name and region are set in `backend/samconfig.toml` (`cloud-career-analyzer`, `ap-southeast-1`). Deployment creates the Cognito User Pool, app client, and API authorizer. The stack outputs include `ApiEndpoint`, `CognitoRegion`, and `CognitoUserPoolClientId`.
+
+## Run the frontend
+
+Copy `frontend/.env.example` to `frontend/.env` and fill in the deployed stack outputs:
 
 ```env
-VITE_API_URL=https://your-api-id.execute-api.your-region.amazonaws.com/Prod/upload-url
+VITE_API_URL=https://your-api-id.execute-api.ap-southeast-1.amazonaws.com/Prod/upload-url
 VITE_COGNITO_REGION=ap-southeast-1
 VITE_COGNITO_CLIENT_ID=your-user-pool-client-id
 ```
 
-Then start the frontend:
+Then run:
 
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-## Deploy the backend
-
-Install the AWS CLI and AWS SAM CLI, configure AWS credentials, then run from `backend/`:
-
-```bash
-sam build
-sam deploy
-```
-
-The stack is configured in `backend/samconfig.toml` and creates the Cognito User Pool, public app client, and API Gateway Cognito authorizer. After deployment, use `ApiEndpoint`, `CognitoRegion`, and `CognitoUserPoolClientId` outputs in `frontend/.env`. Reconfigure the provider key in the Lambda after each SAM deployment.
+For a hosted frontend, configure the same three `VITE_` variables in its build settings and publish a fresh build after backend deployment.
 
 ## Project structure
 
 ```text
 cloud-career-analyzer/
-├── frontend/                         # React, TypeScript, and Vite app
-│   └── src/
-│       └── App.tsx
-├── backend/
-│   ├── functions/
-│   │   ├── get_upload_url/           # Creates the S3 presigned upload URL
-│   │   ├── extract_text/             # Reads PDF text from S3
-│   │   ├── analyze_cv/               # Groq/OpenAI analysis and mock fallback
-│   │   └── analysis_history/         # DynamoDB analysis history
-│   ├── template.yaml                 # SAM infrastructure definition
-│   └── samconfig.toml                # SAM deployment settings
-└── README.md
+|-- frontend/                         # React, TypeScript, and Vite
+|   `-- src/
+|       |-- App.tsx
+|       `-- cognito.ts                # Cognito sign-up/sign-in and token management
+|-- backend/
+|   |-- functions/
+|   |   |-- get_upload_url/           # Creates a user-scoped S3 upload URL
+|   |   |-- extract_text/              # Reads and extracts PDF text
+|   |   |-- analyze_cv/                # Groq/OpenAI analysis and fallback
+|   |   `-- analysis_history/          # Per-user DynamoDB history
+|   |-- template.yaml                 # SAM infrastructure definition
+|   `-- samconfig.toml                # Deployment settings
+`-- README.md
 ```
 
 ## Author
